@@ -5,6 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -90,4 +91,34 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64
+sys_trace(void)
+{
+  int mask;
+  argint(0, &mask);
+  myproc()->trace_mask = mask;
+  return 0;
+}
+
+uint64
+sys_sysinfo(void)
+{
+  uint64 user_addr;
+  argaddr(0, &user_addr);
+
+  struct sysinfo info = {
+    .freemem = num_free_pages() * PGSIZE,
+    .nproc = num_processes(),
+  };
+
+  struct proc *p = myproc();
+  if (copyout(p->pagetable, user_addr, (char*)&info, sizeof(info)) < 0)
+  {
+    printf("%d sysinfo: bad vaddr: %p\n", p->pid, user_addr);
+    return -1;
+  }
+
+  return 0;
 }

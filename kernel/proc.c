@@ -26,6 +26,23 @@ extern char trampoline[]; // trampoline.S
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
 
+// Count the number of processes that exist.
+int
+num_processes()
+{
+  int count = 0;
+  for (int i = 0; i < NPROC; i++) {
+    acquire(&proc[i].lock);
+    enum procstate state = proc[i].state;
+    release(&proc[i].lock);
+
+    if (state != UNUSED) {
+      count++;
+    }
+  }
+  return count;
+}
+
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
 // guard page.
@@ -55,6 +72,7 @@ procinit(void)
       initlock(&p->lock, "proc");
       p->state = UNUSED;
       p->kstack = KSTACK((int) (p - proc));
+      p->trace_mask = 0;
   }
 }
 
@@ -145,6 +163,9 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
+
+  // Initially, don't log any syscalls.
+  p->trace_mask = 0;
 
   return p;
 }
@@ -287,6 +308,9 @@ fork(void)
   if((np = allocproc()) == 0){
     return -1;
   }
+
+  // Inherit syscall logging.
+  np->trace_mask = p->trace_mask;
 
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
