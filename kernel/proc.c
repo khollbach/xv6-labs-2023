@@ -707,3 +707,43 @@ procdump(void)
     printf("\n");
   }
 }
+
+// uint64 base; // void* -- first page va
+// int len;     // num pages (<= 32)
+// uint64 mask; // int*  -- va of out bitmask
+int
+pgaccess(uint64 base, int len, uint64 mask)
+{
+  // The test cases want us to allow this.
+  // if (base % PGSIZE != 0) {
+  //   printf("pgaccess: base must be at a page boundary -- %p\n", base);
+  //   return -1;
+  // }
+
+  if (len < 0 || len > 32) {
+    printf("pgaccess: bad len %d\n", len);
+    return -1;
+  }
+
+  int out = 0;
+
+  struct proc *p = myproc();
+  for (int i = 0; i < len; i++) {
+    uint64 va = base + i * PGSIZE; // overflow?
+    pte_t *e = walk(p->pagetable, va, 0);
+    if (e == 0) {
+      printf("pgaccess: can't translate va %p\n", va); // ?
+    }
+    if (*e & PTE_A) {
+      out |= 1 << i;
+    }
+    *e &= ~PTE_A;
+  }
+
+  int ret = copyout(p->pagetable, mask, (char *) &out, sizeof(out));
+  if (ret < 0) {
+    printf("copyout: can't copy to out addr %p\n", mask);
+  }
+
+  return 0;
+}
