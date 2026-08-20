@@ -1,0 +1,5 @@
+Speed up system calls
+- I don't see any that can be optimized in the same way.
+- Are there??
+
+
