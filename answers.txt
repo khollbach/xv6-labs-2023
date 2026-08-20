@@ -2,4 +2,36 @@ Speed up system calls
 - I don't see any that can be optimized in the same way.
 - Are there??
 
+Print a page table
+
+page table 0x0000000087f6b000
+ ..0: pte 0x0000000021fd9c01 pa 0x0000000087f67000
+ .. ..0: pte 0x0000000021fd9801 pa 0x0000000087f66000
+ .. .. ..0: pte 0x0000000021fda01f pa 0x0000000087f68000
+ .. .. ..1: pte 0x0000000021fd941f pa 0x0000000087f65000
+ .. .. ..2: pte 0x0000000021fd9007 pa 0x0000000087f64000
+ .. .. ..3: pte 0x0000000021fd8c17 pa 0x0000000087f63000
+ ..255: pte 0x0000000021fda801 pa 0x0000000087f6a000
+ .. ..511: pte 0x0000000021fda401 pa 0x0000000087f69000
+ .. .. ..509: pte 0x0000000021fdcc13 pa 0x0000000087f73000
+ .. .. ..510: pte 0x0000000021fdd007 pa 0x0000000087f74000
+ .. .. ..511: pte 0x000000002000180b pa 0x0000000080006000
+
+dagu xwrv
+ 1f -- user rwx valid       -- these two pages likely contain the user program 'text' (code)
+ 1f -- same                    it's interesting that's writable, but I guess that's fine
+ 07 -- rw (but not by user) -- I guess this is the guard page for the user stack
+ 17 -- rw by user           -- this must be the user stack, which grows down
+
+ 13 -- user r/o (this is the usyscall page we added)
+ 07 -- rw (k/o) -- this is the trapframe (data for trampoline (?))
+ 0b -- rx (k/o) -- this is the 'trampoline' code
+
+[ ] ok but why does the handout have (1b 17) where we have (1f 1f) ???
+    - it makes more sense to have the program code no-write
+    - and it makes sense that there'd be a data page with r/w but not x
+    > so why does _our_ output not match theirs ???
+      (I guess b/c our compiler is doing different things ?)
+        [ ] maybe we could inspect the obj file it outputs to verify that it's giving those sections
+            with those perms...
 

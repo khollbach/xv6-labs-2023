@@ -171,6 +171,34 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   return 0;
 }
 
+// Recursively print page table entries.
+void
+printwalk(pagetable_t pagetable, int depth)
+{
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if(pte & PTE_V){
+      for(int j = 0; j < depth; j++)
+        printf(" ..");
+      uint64 pa = PTE2PA(pte);
+      printf("%d: pte %p pa %p\n", i, pte, pa);
+
+      // This PTE points to a lower-level page table.
+      if((pte & (PTE_R|PTE_W|PTE_X)) == 0){
+        printwalk((pagetable_t)pa, depth + 1);
+      }
+    }
+  }
+}
+
+// Print the contents of a page table, for debugging.
+void
+vmprint(pagetable_t pagetable)
+{
+  printf("page table %p\n", pagetable);
+  printwalk(pagetable, 1);
+}
+
 // Remove npages of mappings starting from va. va must be
 // page-aligned. The mappings must exist.
 // Optionally free the physical memory.
