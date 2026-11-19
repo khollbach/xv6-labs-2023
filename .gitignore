@@ -23,3 +23,7 @@ ph
 barrier
 /lab-*.json
 .DS_Store
+
+compile_commands.json
+Makefile.2023
+Makefile.2026
