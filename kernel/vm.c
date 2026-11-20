@@ -315,20 +315,36 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  // char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+
+    /*
+    left off here.
+    next steps:
+    - incr refcount here
+    - record old value of PTE_W in PTE_RSW bit(s)
+    - check that bit in exception handler (& kill user proc if it's clear)
+    - from ex. hdlr, perform the copy; decr refcount
+        - ~~ if refcount hits zero, then free there ~~
+        > or maybe free just gets called as normal (TODO: where?)
+          and only actually takes effect once, when refcount is 1.
+    */
+
+    // Clear parent W bits. (And child.)
+    *pte &= ~PTE_W;
+
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    // if((mem = kalloc()) == 0)
+    //   goto err;
+    // memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
+      // kfree(mem);
       goto err;
     }
   }

@@ -50,7 +50,8 @@ usertrap(void)
   // save user program counter.
   p->trapframe->epc = r_sepc();
   
-  if(r_scause() == 8){
+  uint64 scause = r_scause();
+  if(scause == 8){
     // system call
 
     if(killed(p))
@@ -67,6 +68,22 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if (scause == 15) {
+    // store/amo page fault
+    printf("usertrap(): store/amo page fault scause %p pid=%d\n", r_scause(), p->pid);
+    printf("stval (vaddr ?): %p\n", r_stval());
+    printf("pte: %p\n", walk(p->pagetable, r_stval(), 0));
+    printf("pa: %p\n", PTE2PA(*walk(p->pagetable, r_stval(), 0)));
+    printf("flags: %p\n", PTE_FLAGS(*walk(p->pagetable, r_stval(), 0)));
+    panic("dead");
+    // TODO
+    // - which page was being written ?
+    //    > 
+    // - is it COW-enabled? (If so, COW.)
+    //    -> walk the curr proc's page table
+    //    -> kalloc a new page (with correct perms)
+    //    -> point at it
+    //    (possibly adjust refcounts & clean up when 0)
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());

@@ -23,6 +23,14 @@ struct {
   struct run *freelist;
 } kmem;
 
+#define RAMBASE 0x80000000
+
+int refcounts[(PHYSTOP - RAMBASE) / PGSIZE]; // (This should be an upper bound.)
+
+int *get_rc(void *pa) {
+  return &refcounts[((uint64)pa - RAMBASE) / PGSIZE];
+}
+
 void
 kinit()
 {
@@ -56,10 +64,30 @@ kfree(void *pa)
 
   r = (struct run*)pa;
 
+  if (*get_rc(r) > 1) {
+    return; // no-op
+  }
+
+  *get_rc(r) = 0; // set refcount to 0 as an invalid value
+
   acquire(&kmem.lock);
   r->next = kmem.freelist;
   kmem.freelist = r;
   release(&kmem.lock);
+}
+
+// Takes a page that was previously kalloc'd. Increments the refcount.
+void inc_rc(void *pa) {
+  (*get_rc(pa))++;
+}
+
+// Panic if the page already had one refcount.
+void dec_rc(void *pa) {
+  (*get_rc(pa))--;
+
+  if (*get_rc(pa) <= 0) {
+    panic("dec_rc pa");
+  }
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -76,7 +104,12 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if(r)
+  if(r) {
+    if (*get_rc(r) != 0) {
+      panic("kalloc: expected refcount to be 0");
+    }
     memset((char*)r, 5, PGSIZE); // fill with junk
+    *get_rc(r) = 1; // init refcount
+  }
   return (void*)r;
 }
