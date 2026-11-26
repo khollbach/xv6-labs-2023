@@ -310,14 +310,17 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 // returns 0 on success, -1 on failure.
 // frees any allocated pages on failure.
 int
-uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
+___uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
   pte_t *pte;
   uint64 pa, i;
   uint flags;
   char *mem;
 
+  vmprint(old);
+  printf("uvmcopy: sz = %d\n", sz);
   for(i = 0; i < sz; i += PGSIZE){
+    printf("uvmcopy: i = %d\n", i);
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
@@ -337,6 +340,29 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
  err:
   uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
+}
+
+int uvmcopy(pagetable_t old, pagetable_t new, uint64 _) {
+  for(int i = 0; i < 240; i++){
+    pte_t old_pte = old[i];
+    if (PTE_FLAGS(old_pte) & PTE_V) {
+      if (PTE_FLAGS(old_pte) & (PTE_R|PTE_W|PTE_X)) {
+        // user page
+        void *user_page = kalloc();
+        memmove(user_page, (void *) PTE2PA(old_pte), PGSIZE);
+        new[i] = PA2PTE(user_page) | PTE_FLAGS(old_pte);
+      } else {
+        // directory
+        pagetable_t new_node = kalloc();
+        new[i] = PA2PTE(new_node) | PTE_FLAGS(old_pte);
+        uvmcopy((pagetable_t) PTE2PA(old_pte), new_node, _);
+      }
+    } else {
+      new[i] &= ~PTE_V;
+    }
+  }
+
+  return 0;
 }
 
 // mark a PTE invalid for user access.
@@ -449,3 +475,51 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+// Recursively print page table entries.
+void
+printwalk(pagetable_t pagetable, int depth)
+{
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if(pte & PTE_V){
+      for(int j = 0; j < depth; j++)
+        printf(" ..");
+      uint64 pa = PTE2PA(pte);
+      printf("%d: pte %p pa %p\n", i, pte, pa);
+
+      // This PTE points to a lower-level page table.
+      if((pte & (PTE_R|PTE_W|PTE_X)) == 0){
+        printwalk((pagetable_t)pa, depth + 1);
+      }
+    }
+  }
+}
+
+// Print the contents of a page table, for debugging.
+void
+vmprint(pagetable_t pagetable)
+{
+  printf("page table %p\n", pagetable);
+  printwalk(pagetable, 1);
+}
+
+
+/*
+
+
+(BEFORE)
+page table 0x0000000087f43000
+ ..0: pte 0x0000000021fcfc01 pa 0x0000000087f3f000
+ .. ..0: pte 0x0000000021fcf801 pa 0x0000000087f3e000
+ .. .. ..0: pte 0x0000000021fd005b pa 0x0000000087f40000
+ .. .. ..1: pte 0x0000000021fcf417 pa 0x0000000087f3d000
+ .. .. ..2: pte 0x0000000021fcf007 pa 0x0000000087f3c000
+ .. .. ..3: pte 0x0000000021fcecd7 pa 0x0000000087f3b000
+ ..255: pte 0x0000000021fd0801 pa 0x0000000087f42000
+ .. ..511: pte 0x0000000021fd0401 pa 0x0000000087f41000
+ .. .. ..510: pte 0x0000000021fd80c7 pa 0x0000000087f60000
+ .. .. ..511: pte 0x000000002000184b pa 0x0000000080006000
+
+
+*/
